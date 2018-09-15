@@ -146,5 +146,8 @@ void remove_trap(drakvuf_t drakvuf,
 
 bool control_debug_trap(drakvuf_t drakvuf, bool toggle);
 bool control_cpuid_trap(drakvuf_t drakvuf, bool toggle);
+bool control_cr0_trap(drakvuf_t drakvuf, bool toggle);
+bool control_cr4_trap(drakvuf_t drakvuf, bool toggle);
+bool control_msr_efer_trap(drakvuf_t drakvuf, bool toggle);
 
 #endif

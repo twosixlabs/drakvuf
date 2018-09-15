@@ -153,7 +153,7 @@ void drakvuf_close(drakvuf_t drakvuf, const bool pause)
 bool drakvuf_init(drakvuf_t* drakvuf, const char* domain, const char* rekall_profile, bool _verbose)
 {
 
-    if ( !domain || !rekall_profile )
+    if ( !domain )
         return 0;
 
 #ifdef DRAKVUF_DEBUG
@@ -161,10 +161,6 @@ bool drakvuf_init(drakvuf_t* drakvuf, const char* domain, const char* rekall_pro
 #endif
 
     *drakvuf = g_malloc0(sizeof(struct drakvuf));
-
-    (*drakvuf)->rekall_profile_json = json_object_from_file(rekall_profile);
-    (*drakvuf)->rekall_profile = g_strdup(rekall_profile);
-    (*drakvuf)->os = rekall_get_os_type((*drakvuf)->rekall_profile_json);
 
     g_mutex_init(&(*drakvuf)->vmi_lock);
 
@@ -188,20 +184,27 @@ bool drakvuf_init(drakvuf_t* drakvuf, const char* domain, const char* rekall_pro
         goto err;
     }
 
-    switch ((*drakvuf)->os)
+    if ( rekall_profile )
     {
-        case VMI_OS_WINDOWS:
-            if ( !set_os_windows(*drakvuf) )
+        (*drakvuf)->rekall_profile_json = json_object_from_file(rekall_profile);
+        (*drakvuf)->rekall_profile = g_strdup(rekall_profile);
+        (*drakvuf)->os = rekall_get_os_type((*drakvuf)->rekall_profile_json);
+
+        switch ((*drakvuf)->os)
+        {
+            case VMI_OS_WINDOWS:
+                if ( !set_os_windows(*drakvuf) )
+                    goto err;
+                break;
+            case VMI_OS_LINUX:
+                if ( !set_os_linux(*drakvuf) )
+                    goto err;
+                break;
+            default:
+                fprintf(stderr, "The Rekall profile describes an unknown operating system kernel!\n");
                 goto err;
-            break;
-        case VMI_OS_LINUX:
-            if ( !set_os_linux(*drakvuf) )
-                goto err;
-            break;
-        default:
-            fprintf(stderr, "The Rekall profile describes an unknown operating system kernel!\n");
-            goto err;
-    };
+        };
+    }
 
     PRINT_DEBUG("libdrakvuf initialized\n");
 
@@ -319,10 +322,32 @@ bool inject_trap_breakpoint(drakvuf_t drakvuf, drakvuf_trap_t* trap)
 
 bool inject_trap_reg(drakvuf_t drakvuf, drakvuf_trap_t* trap)
 {
-    if (CR3 == trap->reg)
+    switch(trap->reg)
     {
-        drakvuf->cr3 = g_slist_prepend(drakvuf->cr3, trap);
-        return 1;
+        case CR0:
+            if ( !drakvuf->cr0 && !control_cr0_trap(drakvuf, 1) )
+                return 0;
+
+            drakvuf->cr0 = g_slist_prepend(drakvuf->cr0, trap);
+            return 1;
+        case CR3:
+            /* TODO: this is always on by default, evaluate if really needed */
+            drakvuf->cr3 = g_slist_prepend(drakvuf->cr3, trap);
+            return 1;
+        case CR4:
+            if ( !drakvuf->cr4 && !control_cr4_trap(drakvuf, 1) )
+                return 0;
+
+            drakvuf->cr4 = g_slist_prepend(drakvuf->cr4, trap);
+            return 1;
+        case MSR_EFER:
+            if ( !drakvuf->msr_efer && !control_msr_efer_trap(drakvuf, 1) )
+                return 0;
+
+            drakvuf->msr_efer = g_slist_prepend(drakvuf->msr_efer, trap);
+            return 1;
+        default:
+            break;
     }
 
     fprintf(stderr, "Support for trapping requested register is not (yet) implemented!\n");

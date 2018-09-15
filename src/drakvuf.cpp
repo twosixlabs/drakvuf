@@ -166,7 +166,6 @@ int drakvuf_c::start_plugins(const bool* plugin_list,
                     struct socketmon_config c =
                     {
                         .tcpip_profile = tcpip_profile,
-                        .tcpip_profile_json = json_object_from_file(tcpip_profile)
                     };
                     rc = this->plugins->start((drakvuf_plugin_t)i, &c);
                     break;
@@ -216,7 +215,8 @@ drakvuf_c::drakvuf_c(const char* domain,
     if (!drakvuf_init(&this->drakvuf, domain, rekall_profile, verbose))
         throw -1;
 
-    this->os = drakvuf_get_os_type(this->drakvuf);
+    if ( rekall_profile )
+        this->os = drakvuf_get_os_type(this->drakvuf);
 
     g_mutex_init(&this->loop_signal);
     g_mutex_lock(&this->loop_signal);

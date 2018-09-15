@@ -164,7 +164,7 @@ int main(int argc, char** argv)
         return rc;
     }
 
-    if (argc < 4)
+    if (argc < 2)
     {
         fprintf(stderr, "Required input:\n"
                 "\t -r <rekall profile>       The Rekall profile of the OS kernel\n"
@@ -298,12 +298,6 @@ int main(int argc, char** argv)
         return rc;
     }
 
-    if (!rekall_profile)
-    {
-        fprintf(stderr, "No Rekall profile specified (-r)!\n");
-        return rc;
-    }
-
     if ( INJECT_METHOD_DOPP == injection_method && (!binary_path || !target_process) )
     {
         fprintf(stderr, "Missing parameters for process doppelganging injection (-B and -P)!\n");
@@ -350,7 +344,10 @@ int main(int argc, char** argv)
     PRINT_DEBUG("Starting plugins\n");
 
     if ( drakvuf->start_plugins(plugin_list, dump_folder, dump_modified_files, filedelete_use_injector, cpuid_stealth, tcpip, syscalls_filter_file, abort_on_bsod) < 0 )
+    {
+        PRINT_DEBUG("Plugin startup failed\n");
         goto exit;
+    }
 
     PRINT_DEBUG("Beginning DRAKVUF loop\n");
 

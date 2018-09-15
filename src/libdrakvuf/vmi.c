@@ -564,6 +564,54 @@ event_response_t int3_cb(vmi_instance_t vmi, vmi_event_t* event)
     return rsp;
 }
 
+event_response_t cr0_cb(vmi_instance_t vmi, vmi_event_t* event)
+{
+    UNUSED(vmi);
+    event_response_t rsp = 0;
+    drakvuf_t drakvuf = (drakvuf_t)event->data;
+
+#ifdef DRAKVUF_DEBUG
+    /* This is very verbose and always on so we only print debug information
+     * when there is a subscriber trap */
+    if (drakvuf->cr0)
+        PRINT_DEBUG("CR0 cb on vCPU %u: 0x%" PRIx64 "\n", event->vcpu_id, event->reg_event.value);
+#endif
+
+    proc_data_t proc_data = {0};
+
+    drakvuf_get_current_process_data( drakvuf, event->vcpu_id, &proc_data );
+
+    drakvuf->in_callback = 1;
+    GSList* loop = drakvuf->cr0;
+    while (loop)
+    {
+        drakvuf_trap_t* trap = loop->data;
+        drakvuf_trap_info_t trap_info =
+        {
+            .trap = trap,
+            .proc_data.base_addr = proc_data.base_addr,
+            .proc_data.name      = proc_data.name,
+            .proc_data.pid       = proc_data.pid,
+            .proc_data.ppid      = proc_data.ppid,
+            .proc_data.userid    = proc_data.userid,
+            .regs = event->x86_regs,
+            .vcpu = event->vcpu_id,
+        };
+
+        g_get_current_time(&trap_info.timestamp);
+
+        loop = loop->next;
+        rsp |= trap->cb(drakvuf, &trap_info);
+    }
+    drakvuf->in_callback = 0;
+
+    g_free( (gpointer)proc_data.name );
+
+    process_free_requests(drakvuf);
+
+    return rsp;
+}
+
 event_response_t cr3_cb(vmi_instance_t vmi, vmi_event_t* event)
 {
     UNUSED(vmi);
@@ -604,6 +652,102 @@ event_response_t cr3_cb(vmi_instance_t vmi, vmi_event_t* event)
 
     drakvuf->in_callback = 1;
     GSList* loop = drakvuf->cr3;
+    while (loop)
+    {
+        drakvuf_trap_t* trap = loop->data;
+        drakvuf_trap_info_t trap_info =
+        {
+            .trap = trap,
+            .proc_data.base_addr = proc_data.base_addr,
+            .proc_data.name      = proc_data.name,
+            .proc_data.pid       = proc_data.pid,
+            .proc_data.ppid      = proc_data.ppid,
+            .proc_data.userid    = proc_data.userid,
+            .regs = event->x86_regs,
+            .vcpu = event->vcpu_id,
+        };
+
+        g_get_current_time(&trap_info.timestamp);
+
+        loop = loop->next;
+        rsp |= trap->cb(drakvuf, &trap_info);
+    }
+    drakvuf->in_callback = 0;
+
+    g_free( (gpointer)proc_data.name );
+
+    process_free_requests(drakvuf);
+
+    return rsp;
+}
+
+event_response_t cr4_cb(vmi_instance_t vmi, vmi_event_t* event)
+{
+    UNUSED(vmi);
+    event_response_t rsp = 0;
+    drakvuf_t drakvuf = (drakvuf_t)event->data;
+
+#ifdef DRAKVUF_DEBUG
+    /* This is very verbose and always on so we only print debug information
+     * when there is a subscriber trap */
+    if (drakvuf->cr4)
+        PRINT_DEBUG("CR4 cb on vCPU %u: 0x%" PRIx64 "\n", event->vcpu_id, event->reg_event.value);
+#endif
+
+    proc_data_t proc_data = {0};
+
+    drakvuf_get_current_process_data( drakvuf, event->vcpu_id, &proc_data );
+
+    drakvuf->in_callback = 1;
+    GSList* loop = drakvuf->cr4;
+    while (loop)
+    {
+        drakvuf_trap_t* trap = loop->data;
+        drakvuf_trap_info_t trap_info =
+        {
+            .trap = trap,
+            .proc_data.base_addr = proc_data.base_addr,
+            .proc_data.name      = proc_data.name,
+            .proc_data.pid       = proc_data.pid,
+            .proc_data.ppid      = proc_data.ppid,
+            .proc_data.userid    = proc_data.userid,
+            .regs = event->x86_regs,
+            .vcpu = event->vcpu_id,
+        };
+
+        g_get_current_time(&trap_info.timestamp);
+
+        loop = loop->next;
+        rsp |= trap->cb(drakvuf, &trap_info);
+    }
+    drakvuf->in_callback = 0;
+
+    g_free( (gpointer)proc_data.name );
+
+    process_free_requests(drakvuf);
+
+    return rsp;
+}
+
+event_response_t msr_efer_cb(vmi_instance_t vmi, vmi_event_t* event)
+{
+    UNUSED(vmi);
+    event_response_t rsp = 0;
+    drakvuf_t drakvuf = (drakvuf_t)event->data;
+
+#ifdef DRAKVUF_DEBUG
+    /* This is very verbose and always on so we only print debug information
+     * when there is a subscriber trap */
+    if (drakvuf->msr_efer)
+        PRINT_DEBUG("MSR_EFER cb on vCPU %u: 0x%" PRIx64 "\n", event->vcpu_id, event->reg_event.value);
+#endif
+
+    proc_data_t proc_data = {0};
+
+    drakvuf_get_current_process_data( drakvuf, event->vcpu_id, &proc_data );
+
+    drakvuf->in_callback = 1;
+    GSList* loop = drakvuf->msr_efer;
     while (loop)
     {
         drakvuf_trap_t* trap = loop->data;
@@ -1185,6 +1329,78 @@ bool control_debug_trap(drakvuf_t drakvuf, bool toggle)
     return 1;
 }
 
+bool control_cr0_trap(drakvuf_t drakvuf, bool toggle)
+{
+    SETUP_REG_EVENT(&drakvuf->cr0_event, CR0, VMI_REGACCESS_W, 0, cr0_cb);
+
+    if ( toggle )
+    {
+        if (VMI_FAILURE == vmi_register_event(drakvuf->vmi, &drakvuf->cr0_event))
+        {
+            fprintf(stderr, "Failed to register CR0 event\n");
+            return 0;
+        }
+    }
+    else
+    {
+        if (VMI_FAILURE == vmi_clear_event(drakvuf->vmi, &drakvuf->cr0_event, NULL))
+        {
+            fprintf(stderr, "Failed to clear CR0 event\n");
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+bool control_cr4_trap(drakvuf_t drakvuf, bool toggle)
+{
+    SETUP_REG_EVENT(&drakvuf->cr4_event, CR4, VMI_REGACCESS_W, 0, cr4_cb);
+
+    if ( toggle )
+    {
+        if (VMI_FAILURE == vmi_register_event(drakvuf->vmi, &drakvuf->cr4_event))
+        {
+            fprintf(stderr, "Failed to register CR4 event\n");
+            return 0;
+        }
+    }
+    else
+    {
+        if (VMI_FAILURE == vmi_clear_event(drakvuf->vmi, &drakvuf->cr4_event, NULL))
+        {
+            fprintf(stderr, "Failed to clear CR4 event\n");
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+bool control_msr_efer_trap(drakvuf_t drakvuf, bool toggle)
+{
+    SETUP_REG_EVENT(&drakvuf->msr_efer_event, MSR_EFER, VMI_REGACCESS_W, 0, msr_efer_cb);
+
+    if ( toggle )
+    {
+        if (VMI_FAILURE == vmi_register_event(drakvuf->vmi, &drakvuf->msr_efer_event))
+        {
+            fprintf(stderr, "Failed to register MSR_EFER event\n");
+            return 0;
+        }
+    }
+    else
+    {
+        if (VMI_FAILURE == vmi_clear_event(drakvuf->vmi, &drakvuf->msr_efer_event, NULL))
+        {
+            fprintf(stderr, "Failed to clear MSR_EFER event\n");
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 bool control_cpuid_trap(drakvuf_t drakvuf, bool toggle)
 {
     drakvuf->cpuid_event.version = VMI_EVENTS_VERSION;
@@ -1289,38 +1505,40 @@ bool init_vmi(drakvuf_t drakvuf)
     }
     PRINT_DEBUG("init_vmi: initializing vmi done\n");
 
-    GHashTable* config = g_hash_table_new(g_str_hash, g_str_equal);
-    g_hash_table_insert(config, "rekall_profile", drakvuf->rekall_profile);
-
-    switch (drakvuf->os)
-    {
-        case VMI_OS_WINDOWS:
-            g_hash_table_insert(config, "os_type", "Windows");
-            flags = VMI_PM_INITFLAG_TRANSITION_PAGES;
-            break;
-        case VMI_OS_LINUX:
-            g_hash_table_insert(config, "os_type", "Linux");
-            break;
-        default:
-            break;
-    };
-
     if (VMI_PM_UNKNOWN == vmi_init_paging(drakvuf->vmi, flags) )
     {
-        printf("Failed to init LibVMI paging.\n");
-        g_hash_table_destroy(config);
-        return 1;
+        PRINT_DEBUG("Failed to init LibVMI paging.\n");
+        //TODO register CR0.PG/MSR_EFER.LME event to catch paging initialization/changes
     }
 
-    os_t os = vmi_init_os(drakvuf->vmi, VMI_CONFIG_GHASHTABLE, config, NULL);
-
-    g_hash_table_destroy(config);
-
-    if ( os != drakvuf->os )
+    if ( drakvuf->rekall_profile )
     {
-        PRINT_DEBUG("Failed to init LibVMI library.\n");
-        drakvuf->vmi = NULL;
-        return 0;
+        GHashTable* config = g_hash_table_new(g_str_hash, g_str_equal);
+        g_hash_table_insert(config, "rekall_profile", drakvuf->rekall_profile);
+
+        switch (drakvuf->os)
+        {
+            case VMI_OS_WINDOWS:
+                g_hash_table_insert(config, "os_type", "Windows");
+                flags = VMI_PM_INITFLAG_TRANSITION_PAGES;
+                break;
+            case VMI_OS_LINUX:
+                g_hash_table_insert(config, "os_type", "Linux");
+                break;
+            default:
+                break;
+        };
+
+        os_t os = vmi_init_os(drakvuf->vmi, VMI_CONFIG_GHASHTABLE, config, NULL);
+
+        g_hash_table_destroy(config);
+
+        if ( os != drakvuf->os )
+        {
+            PRINT_DEBUG("Failed to init LibVMI library.\n");
+            drakvuf->vmi = NULL;
+            return 0;
+        }
     }
 
     drakvuf->pm = vmi_get_page_mode(drakvuf->vmi, 0);
@@ -1466,7 +1684,7 @@ bool init_vmi(drakvuf_t drakvuf)
 
 void close_vmi(drakvuf_t drakvuf)
 {
-    PRINT_DEBUG("starting close_vmi_drakvuf\n");
+    PRINT_DEBUG("starting close_vmi\n");
 
     drakvuf_pause(drakvuf);
 
@@ -1560,5 +1778,5 @@ void close_vmi(drakvuf_t drakvuf)
 
     drakvuf_resume(drakvuf);
 
-    PRINT_DEBUG("close_vmi_drakvuf finished\n");
+    PRINT_DEBUG("close_vmi finished\n");
 }

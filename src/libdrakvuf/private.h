@@ -169,7 +169,10 @@ struct drakvuf
     GMutex vmi_lock;
     vmi_instance_t vmi;
 
+    vmi_event_t cr0_event;
     vmi_event_t cr3_event;
+    vmi_event_t cr4_event;
+    vmi_event_t msr_efer_event;
     vmi_event_t interrupt_event;
     vmi_event_t mem_event;
     vmi_event_t debug_event;
@@ -215,7 +218,7 @@ struct drakvuf
     GHashTable* memaccess_lookup_trap; // key: trap pointer
     // val: struct memaccess
 
-    GSList* cr0, *cr3, *cr4, *debug, *cpuid;
+    GSList* cr0, *cr3, *cr4, *debug, *cpuid, *msr_efer;
 
     GSList* event_fd_info;     // the list of registered event FDs
     struct pollfd* event_fds;  // auto-generated pollfd for poll()

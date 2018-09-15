@@ -118,6 +118,7 @@
 #include "regmon/regmon.h"
 #include "procmon/procmon.h"
 #include "bsodmon/bsodmon.h"
+#include "ovmfmon/ovmfmon.h"
 
 drakvuf_plugins::drakvuf_plugins(const drakvuf_t drakvuf, output_format_t output, os_t os)
 {
@@ -143,7 +144,10 @@ int drakvuf_plugins::start(const drakvuf_plugin_t plugin_id,
         PRINT_DEBUG("Starting plugin %s\n", drakvuf_plugin_names[plugin_id]);
 
         if ( !drakvuf_plugin_os_support[plugin_id][this->os] )
+        {
+            PRINT_DEBUG("Plugin %s doesn't support the OS\n", drakvuf_plugin_names[plugin_id]);
             return 0;
+        }
 
         try
         {
@@ -217,6 +221,11 @@ int drakvuf_plugins::start(const drakvuf_plugin_t plugin_id,
 #ifdef ENABLE_PLUGIN_BSODMON
                 case PLUGIN_BSODMON:
                     this->plugins[plugin_id] = new bsodmon(this->drakvuf, config, this->output);
+                    break;
+#endif
+#ifdef ENABLE_PLUGIN_OVMFMON
+                case PLUGIN_OVMFMON:
+                    this->plugins[plugin_id] = new ovmfmon(this->drakvuf, config, this->output);
                     break;
 #endif
                 default:

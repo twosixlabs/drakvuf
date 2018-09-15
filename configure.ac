@@ -256,6 +256,16 @@ if test x$plugin_bsodmon = xyes; then
   AC_DEFINE_UNQUOTED(ENABLE_PLUGIN_BSODMON, 1, "")
 fi
 
+AC_ARG_ENABLE([plugin_ovmfmon],
+  [AS_HELP_STRING([--disable-plugin-ovmfmon],
+    [Enable the OVMF monitor plugin @<:@yes@:>@])],
+  [plugin_ovmfmon="$enableval"],
+  [plugin_ovmfmon="yes"])
+AM_CONDITIONAL([PLUGIN_OVMFMON], [test x$plugin_ovmfmon = xyes])
+if test x$plugin_ovmfmon = xyes; then
+  AC_DEFINE_UNQUOTED(ENABLE_PLUGIN_OVMFMON, 1, "")
+fi
+
 #####################################################
 
 AC_ARG_ENABLE([hardening],
@@ -431,4 +441,5 @@ Socketmon:  $plugin_socketmon
 Regmon:     $plugin_regmon
 Procmon:    $plugin_procmon
 BSODmon:    $plugin_bsodmon
+OVMFmon:    $plugin_ovmfmon
 -------------------------------------------------------------------------------])
