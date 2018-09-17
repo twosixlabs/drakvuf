@@ -105,7 +105,7 @@
 #include <glib.h>
 #include <config.h>
 #include <inttypes.h>
-#include <libvmi/x86.h>
+#include <libvmi/libvmi.h>
 #include <assert.h>
 
 #include "../plugins.h"
@@ -118,25 +118,65 @@ event_response_t trap_cb(drakvuf_t drakvuf, drakvuf_trap_info_t* info)
     return 0;
 }
 
+static bool find_ovmf_base(drakvuf_t drakvuf, ovmfmon* o)
+{
+    vmi_instance_t vmi = drakvuf_lock_and_get_vmi(drakvuf);
+    addr_t search = OVMF_END - ((PAGE_SIZE + OVMF_MAXOFFSET) & ~OVMF_MAXOFFSET);
+    EFI_FIRMWARE_VOLUME_HEADER fvh = {{ 0 }};
+    addr_t ovmf_base = 0, max_addr = vmi_get_max_physical_address(vmi);
+
+    printf("Max addr: 0x%lx. Search start: 0x%lx\n", max_addr, search);
+
+    while (max_addr <= search && search > LOWCHUNK_BEGIN + LOWCHUNK_SIZE)
+    {
+        if ( VMI_FAILURE == vmi_read_pa(vmi, search, sizeof(EFI_FIRMWARE_VOLUME_HEADER), &fvh, NULL) )
+        {
+            printf("Failed to read page 0x%lx in search for fvh\n", search);
+            break;
+        }
+
+        if ( fvh.Signature == EFI_FVH_SIGNATURE )
+        {
+            ovmf_base = search;
+        }
+
+        search -= PAGE_SIZE;
+    }
+
+    drakvuf_release_vmi(drakvuf);
+
+    if ( !ovmf_base )
+        return 0;
+
+    printf("OVMF Base load address: 0x%lx\n", ovmf_base);
+
+    return 1;
+}
+
 bool trap_modules(drakvuf_t drakvuf, ovmfmon *o)
 {
     unsigned int i;
-    for (i=0;i<3;i++) {
+    for (i=0;i<1;i++) {
         printf("Trapping functions of %s\n", modules[i].name);
         unsigned int z;
         for(z=0;z<modules[i].fcount;z++) {
+
+            if (strcmp(modules[i].function[z].name, "SecCoreStartupWithStack"))
+                continue;
+
+            printf("%s.%s @ 0x%lx\n",
+                    modules[i].name, modules[i].function[z].name, modules[i].BaseAddress + modules[i].function[z].address);
+
             drakvuf_trap_t *trap = (drakvuf_trap_t*)g_malloc0(sizeof(drakvuf_trap_t));
             if ( !trap )
                 return false;
 
             trap->breakpoint.addr_type = ADDR_PA;
             trap->breakpoint.module = modules[i].name;
-            trap->breakpoint.addr = modules[i].BaseAddress + modules[i].functions[z].address;
+            trap->breakpoint.addr = modules[i].BaseAddress + modules[i].function[z].address;
             trap->type = BREAKPOINT;
             trap->data = (void*)drakvuf;
             trap->cb = trap_cb;
-
-            printf("%s.%s @ 0x%lx\n", modules[i].name, modules[i].functions[z].name, modules[i].BaseAddress + modules[i].functions[z].address);
 
             drakvuf_add_trap(drakvuf, trap);
             o->traps = g_slist_prepend(o->traps, trap);
@@ -146,35 +186,21 @@ bool trap_modules(drakvuf_t drakvuf, ovmfmon *o)
     return 1;
 }
 
-void print_ovmf_info(drakvuf_t drakvuf, struct ovmf_info *ovmf_info)
-{
-    printf("Signature: %s. Checksum: %u\n", ovmf_info->signature, ovmf_info->checksum);
-    uint32_t test = 0;
-    vmi_instance_t vmi = drakvuf_lock_and_get_vmi(drakvuf);
-
-    reg_t cr0;
-    reg_t efer;
-
-    vmi_get_vcpureg(vmi, &cr0, CR0, 0);
-    vmi_get_vcpureg(vmi, &efer, MSR_EFER, 0);
-
-    if ( VMI_FAILURE == vmi_read_pa(vmi, 0xffc00000, sizeof(uint32_t), &test, NULL) ) {
-        printf("Failed to read OVMF start\n");
-    }
-
-    drakvuf_release_vmi(drakvuf);
-
-    printf("CR0: 0x%lx EFER: 0x%lx. Test: %u\n", cr0, efer, test);
-}
-
 /* Checksum with the sum over bytes 0..length == 0 */
-static bool verify_ovmf_info_checksum(struct ovmf_info *ovmf_info)
+static inline bool verify_ovmf_info_checksum(struct ovmf_info *ovmf_info)
 {
     uint8_t checksum = 0, i;
     for ( i = 0; i < ovmf_info->length; i++ )
         checksum += ((uint8_t *)(ovmf_info))[i];
 
     return checksum ? false : true;
+}
+
+event_response_t startup_cb(drakvuf_t drakvuf, drakvuf_trap_info_t* info)
+{
+    printf("SecCoreStartupWithStack cb!\n");
+    drakvuf_remove_trap(drakvuf, info->trap, NULL);
+    return 0;
 }
 
 event_response_t info_page_cb(drakvuf_t drakvuf, drakvuf_trap_info_t* info)
@@ -190,11 +216,35 @@ event_response_t info_page_cb(drakvuf_t drakvuf, drakvuf_trap_info_t* info)
     if ( !verify_ovmf_info_checksum(&ovmf_info) )
         return 0;
 
-    printf("OVMF Info checksum correct\n");
-    print_ovmf_info(drakvuf, &ovmf_info);
-    //trap_modules(drakvuf, (ovmfmon*)info->trap->data);
+    PRINT_DEBUG("Xen hvmloader finished loading OVMF\n");
 
     drakvuf_remove_trap(drakvuf, info->trap, NULL);
+
+    ovmfmon *o = (ovmfmon*)info->trap->data;
+
+    o->page[1].cb = startup_cb;
+    o->page[1].data = info->trap->data;
+    o->page[1].type = MEMACCESS;
+    o->page[1].memaccess.type = POST;
+    o->page[1].memaccess.access = VMI_MEMACCESS_X;
+
+    unsigned int z;
+    for(z=0;z<modules[0].fcount;z++)
+    {
+        if (strcmp(modules[0].function[z].name, "SecCoreStartupWithStack"))
+            continue;
+
+        addr_t addr = modules[0].BaseAddress + modules[0].function[z].address;
+        printf("%s.SecCoreStartupWithStack @ 0x%lx\n", modules[0].name, addr);
+
+        o->page[1].memaccess.gfn = addr >> 12;
+    }
+
+    if ( o->page[1].memaccess.gfn && drakvuf_add_trap(drakvuf, &o->page[1]) )
+    {
+        printf("Added gfn watch on SecCoreStartupWithStack\n");
+    }
+
     return 0;
 }
 
@@ -209,19 +259,19 @@ ovmfmon::ovmfmon(drakvuf_t drakvuf, const void* config, output_format_t output)
 
     if ( strncmp("XenHVMOVMF", ovmf_info.signature, 10) || !verify_ovmf_info_checksum(&ovmf_info) )
     {
-        PRINT_DEBUG("No OVMF signature found on info page, waiting for loader to finish\n");
-        this->info_page.cb = info_page_cb;
-        this->info_page.data = (void*)this;
-        this->info_page.type = MEMACCESS;
-        this->info_page.memaccess.gfn = OVMF_INFO_PHYSICAL_ADDRESS >> 12;
-        this->info_page.memaccess.type = POST;
-        this->info_page.memaccess.access = VMI_MEMACCESS_W;
+        PRINT_DEBUG("No OVMF signature found on info page, wait for hvmloader to finish\n");
+        this->page[0].cb = info_page_cb;
+        this->page[0].data = (void*)this;
+        this->page[0].type = MEMACCESS;
+        this->page[0].memaccess.gfn = OVMF_INFO_PHYSICAL_ADDRESS >> 12;
+        this->page[0].memaccess.type = POST;
+        this->page[0].memaccess.access = VMI_MEMACCESS_W;
 
-        if ( !drakvuf_add_trap(drakvuf, &this->info_page) )
+        if ( !drakvuf_add_trap(drakvuf, &this->page[0]) )
             throw -1;
     } else {
-        print_ovmf_info(drakvuf, &ovmf_info);
-        //trap_modules(drakvuf, this);
+        find_ovmf_base(drakvuf, this);
+        trap_modules(drakvuf, this);
     }
 }
 

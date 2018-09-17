@@ -111,7 +111,7 @@
 class ovmfmon: public plugin
 {
 public:
-    drakvuf_trap_t info_page;
+    drakvuf_trap_t page[2];
     GSList *traps;
     output_format_t format;
 

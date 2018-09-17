@@ -42,7 +42,7 @@
  * o Executes a helper program, module, or script to do any of the above.  *
  *                                                                         *
  * This list is not exclusive, but is meant to clarify our interpretation  *
- * of derived works with some common examples.  Other people may interpret *
+* of derived works with some common examples.  Other people may interpret *
  * the plain GPL differently, so we consider this a special exception to   *
  * the GPL that we apply to Covered Software.  Works which meet any of     *
  * these conditions must conform to all of the terms of this license,      *
@@ -115,6 +115,7 @@
 #define LOWCHUNK_MAXOFFSET      0x0000FFFF
 #define OVMF_INFO_PHYSICAL_ADDRESS 0x00001000
 #define OVMF_INFO_MAX_TABLES 4
+#define PAGE_SIZE               (1u<<12)
 
 struct ovmf_info {
     char signature[14]; /* XenHVMOVMF\0\0\0\0 */
@@ -135,6 +136,65 @@ struct ovmf_info {
     uint32_t e820_nr;
 } __attribute__ ((packed));
 
+#define EFI_FVH_SIGNATURE 0x4856465f // _FVH
+
+typedef struct {
+    uint32_t  Data1;
+    uint16_t  Data2;
+    uint16_t  Data3;
+    uint8_t   Data4[8];
+}  __attribute__ ((packed)) EFI_GUID;
+
+typedef struct {
+    ///
+    /// The first 16 bytes are reserved to allow for the reset vector of
+    /// processors whose reset vector is at address 0.
+    ///
+    uint8_t                     ZeroVector[16];
+    ///
+    /// Declares the file system with which the firmware volume is formatted.
+    ///
+    EFI_GUID                    FileSystemGuid;
+    ///
+    /// Length in bytes of the complete firmware volume, including the header.
+    ///
+    uint64_t                    FvLength;
+    ///
+    /// Set to EFI_FVH_SIGNATURE
+    ///
+    uint32_t                    Signature;
+    ///
+    /// Declares capabilities and power-on defaults for the firmware volume.
+    ///
+    uint32_t                    Attributes;
+    ///
+    /// Length in bytes of the complete firmware volume header.
+    ///
+    uint16_t                    HeaderLength;
+    ///
+    /// A 16-bit checksum of the firmware volume header. A valid header sums to zero.
+    ///
+    uint16_t                    Checksum;
+    ///
+    /// Offset, relative to the start of the header, of the extended header
+    /// (EFI_FIRMWARE_VOLUME_EXT_HEADER) or zero if there is no extended header.
+    ///
+    uint16_t                    ExtHeaderOffset;
+    ///
+    /// This field must always be set to zero.
+    ///
+    uint8_t                     Reserved[1];
+    ///
+    /// Set to 2. Future versions of this specification may define new header fields and will
+    /// increment the Revision field accordingly.
+    ///
+    uint8_t                     Revision;
+    ///
+    /// An array of run-length encoded FvBlockMapEntry structures. The array is
+    /// terminated with an entry of {(uint32_t)0,(uint32_t)0}.
+    ///
+    uint64_t    BlockMap[1];
+}  __attribute__ ((packed)) EFI_FIRMWARE_VOLUME_HEADER;
 
 struct function {
     const char *name;
@@ -148,25 +208,15 @@ struct module {
     addr_t textbaseaddress;
     addr_t databaseaddress;
     addr_t fcount;
-    struct function functions[150];
+    struct function function[150];
 };
 
 struct module modules[] = {
-    { .name = "SecMain", .BaseAddress=0x00fffcc094, .EntryPoint=0x00fffd0334, .textbaseaddress=0x0000820380, .databaseaddress=0x000082bac0, .fcount = 41, .functions =
+    { .name = "SecMain", .BaseAddress=0x00fffcc094, .EntryPoint=0x00fffd02d4, .textbaseaddress=0x00fffcc2d4, .databaseaddress=0x00fffd1314, .fcount = 41, .function =
         {
-            { .name="SzFree", .address=0x240 },{ .name="SzAlloc", .address=0x40c },{ .name="GetApicMode.part.2", .address=0x465 },{ .name="LocalApicBaseAddressMsrSupported", .address=0x4b2 },{ .name="GetLocalApicBaseAddress", .address=0x4ef },{ .name="LzmaGuidedSectionExtraction", .address=0x225c },{ .name="LzmaGuidedSectionGetInfo", .address=0x233d },{ .name="TemporaryRamMigration", .address=0x330d },{ .name="FindFfsSectionInstance", .address=0x2a1c },{ .name="LzmaDec_TryDummy.lto_priv.21", .address=0xfd4 },{ .name="AsciiStrnLenS", .address=0x366 },{ .name="GetDecodedSizeOfBuf", .address=0x312 },{ .name="LzmaUefiDecompress", .address=0xb13 },{ .name="InternalAssertJumpBuffer", .address=0x9e0 },{ .name="DebugPrintEnabled", .address=0x30c },{ .name="DebugAssert", .address=0x3b3 },{ .name="GetInterruptState", .address=0x35c },{ .name="ReadUnaligned64", .address=0x972 },{ .name="BasePrintLibSPrintMarker.constprop.18", .address=0x33d3 },{ .name="SecCoreStartupWithStack", .address=0x2488 },{ .name="BasePrintLibFillBuffer", .address=0x32e },{ .name="ReadLocalApicReg", .address=0x616 },{ .name="AsciiSPrint.constprop.16", .address=0x32dd },{ .name="ReadUnaligned16", .address=0x9a9 },{ .name="GetExtractGuidedSectionHandlerInfo", .address=0x2bb },{ .name="FindFfsFileAndSection", .address=0x2a73 },{ .name="LzmaDec_DecodeReal2.lto_priv.22", .address=0x15bc },{ .name="LzmaDec_WriteRem.lto_priv.20", .address=0x241 },{ .name="DebugPrint", .address=0x823 },{ .name="CpuDeadLoop", .address=0x397 },{ .name="CompareGuid", .address=0xa36 },{ .name="IoRead32", .address=0x8fc },{ .name="WriteLocalApicReg", .address=0x527 },{ .name="PeCoffLoaderGetPdbPointer", .address=0x6df },{ .name="IoWrite32", .address=0x8bf },{ .name="BasePrintLibSPrint.constprop.19", .address=0x3f93 },{ .name="DebugAssertEnabled", .address=0x30f },{ .name="SetInterruptState", .address=0x38c },{ .name="CopyMem", .address=0xa83 },{ .name="WriteUnaligned64", .address=0x933 },{ .name="SecStartupPhase2", .address=0x2b46 }
+            { .name="SzFree", .address=0x240 },{ .name="SerialPortWrite", .address=0x241 },{ .name="AsciiStrLen", .address=0x97b },{ .name="SzAlloc", .address=0x443 },{ .name="GetApicMode.part.2", .address=0x49c },{ .name="LocalApicBaseAddressMsrSupported", .address=0x4e9 },{ .name="GetLocalApicBaseAddress", .address=0x526 },{ .name="LzmaGuidedSectionExtraction", .address=0x1077 },{ .name="LzmaGuidedSectionGetInfo", .address=0x1158 },{ .name="TemporaryRamMigration", .address=0x33cf },{ .name="FindFfsSectionInstance", .address=0x1856 },{ .name="LzmaDec_TryDummy.lto_priv.21", .address=0x1980 },{ .name="AsciiStrnLenS", .address=0x39e },{ .name="GetDecodedSizeOfBuf", .address=0x34a },{ .name="LzmaUefiDecompress", .address=0xbb6 },{ .name="InternalAssertJumpBuffer", .address=0xa83 },{ .name="DebugPrintEnabled", .address=0x344 },{ .name="DebugAssert", .address=0x3eb },{ .name="GetInterruptState", .address=0x394 },{ .name="ReadUnaligned64", .address=0x90d },{ .name="BasePrintLibSPrintMarker.constprop.18", .address=0x3495 },{ .name="SecCoreStartupWithStack", .address=0x12a3 },{ .name="BasePrintLibFillBuffer", .address=0x366 },{ .name="ReadLocalApicReg", .address=0x64d },{ .name="AsciiSPrint.constprop.16", .address=0x339f },{ .name="ReadUnaligned16", .address=0x944 },{ .name="GetExtractGuidedSectionHandlerInfo", .address=0x2f3 },{ .name="FindFfsFileAndSection", .address=0x18ad },{ .name="LzmaDec_DecodeReal2.lto_priv.22", .address=0x1f68 },{ .name="LzmaDec_WriteRem.lto_priv.20", .address=0x279 },{ .name="DebugPrint", .address=0x9f5 },{ .name="CpuDeadLoop", .address=0x3cf },{ .name="CompareGuid", .address=0xad9 },{ .name="IoRead32", .address=0x897 },{ .name="WriteLocalApicReg", .address=0x55e },{ .name="PeCoffLoaderGetPdbPointer", .address=0x716 },{ .name="IoWrite32", .address=0x85a },{ .name="BasePrintLibSPrint.constprop.19", .address=0x4055 },{ .name="DebugAssertEnabled", .address=0x347 },{ .name="SetInterruptState", .address=0x3c4 },{ .name="CopyMem", .address=0xb26 },{ .name="WriteUnaligned64", .address=0x8ce },{ .name="SecStartupPhase2", .address=0x2c08 }
         },
     },
-    { .name = "PeiCore", .BaseAddress=0x0000820140, .EntryPoint=0x0000822759, .textbaseaddress=0x0000820380, .databaseaddress=0x000082bac0, .fcount = 137, .functions =
-        {
-            { .name="PlatformDebugLibIoPortFound", .address=0x1bd8 },{ .name="WriteUnaligned64", .address=0x2978 },{ .name="ReportStatusCodeEx.constprop.16", .address=0x4fb4 },{ .name="InternalBuildMemoryAllocationHob", .address=0x6c89 },{ .name="UpdateOrSplitMemoryAllocationHob", .address=0x6d7a },{ .name="ConvertPointer", .address=0x8ec2 },{ .name="ReadUnaligned32", .address=0x2a79 },{ .name="BasePrintLibSPrint.constprop.33", .address=0x9760 },{ .name="InternalPeiCreateHob", .address=0x2d0d },{ .name="PeiGetBootMode", .address=0x7c85 },{ .name="PeiLocatePpi", .address=0x8ee3 },{ .name="BasePrintLibSPrintMarker.constprop.32", .address=0x4207 },{ .name="PeiFfsFvPpiGetFileInfo2", .address=0x8a18 },{ .name="ReportStatusCodeWithExtendedData.constprop.15", .address=0x505c },{ .name="LShiftU64", .address=0x2ae6 },{ .name="PeiDefaultMemWrite", .address=0x7c2b },{ .name="AsciiStrnLenS", .address=0x257f },{ .name="PeiDefaultMemRead32", .address=0x7bfb },{ .name="PeiFfsFvPpiFindFileByType", .address=0x8dcf },{ .name="SecurityPpiNotifyCallback", .address=0x8fa8 },{ .name="AsciiSPrint.constprop.30", .address=0x4dcf },{ .name="PeiFfsFvPpiGetVolumeInfo", .address=0x8c04 },{ .name="PeiFfsFvPpiGetFileInfo", .address=0x8877 },{ .name="PeiLoadImage.constprop.12", .address=0x5202 },{ .name="ConvertPointerInRanges", .address=0x9601 },{ .name="PeiFfsFindNextFile", .address=0x56fc },{ .name="PeiFfsGetFileInfo2", .address=0x54c3 },{ .name="PeiServicesLocatePpi", .address=0x2c7b },{ .name="InternalReportStatusCode.part.2.constprop.18", .address=0x4f5a },{ .name="DebugPrintEnabled", .address=0x254b },{ .name="PeiInstallPeiMemory", .address=0x66b8 },{ .name="PeiFfsFindSectionData", .address=0x562b },{ .name="PeiServicesReInstallPpi", .address=0x2cbf },{ .name="DebugAssert", .address=0x25c1 },{ .name="FirmwareVolmeInfoPpiNotifyCallback", .address=0x67b0 },{ .name="FileHandleToVolume", .address=0x7224 },{ .name="PeiFfsGetVolumeInfo", .address=0x53ee },{ .name="ReadUnaligned64", .address=0x29b7 },{ .name="PeiDefaultMemRead16", .address=0x7c01 },{ .name="ReportStatusCode", .address=0x24f4 },{ .name="PeiGetHobList", .address=0x6548 },{ .name="ProcessLibraryConstructorList.constprop.7", .address=0x975f },{ .name="BasePrintLibFillBuffer", .address=0x2551 },{ .name="PeiDefaultMemWrite8", .address=0x7bf1 },{ .name="PeiFfsFvPpiFindSectionByType", .address=0x8bde },{ .name="FindNextCoreFvHandle", .address=0x8de6 },{ .name="PeiDefaultIoRead8", .address=0x7c04 },{ .name="ZeroMem", .address=0x287f },{ .name="PeiResetSystem", .address=0x91d3 },{ .name="GetNextHob", .address=0x28ee },{ .name="PeCoffLoaderGetMachineType", .address=0x2625 },{ .name="MigrateMemoryPages", .address=0x72e4 },{ .name="PeimDispatchReadiness", .address=0x8226 },{ .name="PeiDefaultMemWrite16", .address=0x7bef },{ .name="PeiCheckAndSwitchStack", .address=0x7454 },{ .name="ReadUnaligned16", .address=0x2aaf },{ .name="PeiDefaultMemWrite32", .address=0x7bed },{ .name="ReportProgressCodeEnabled", .address=0x24f1 },{ .name="PeCoffLoaderImageAddress", .address=0x1bfe },{ .name="ReportDebugCodeEnabled", .address=0x24eb },{ .name="PeiDefaultMemWrite64", .address=0x7beb },{ .name="PeiResetSystem2", .address=0x9170 },{ .name="PeiDefaultMemRead64", .address=0x7bf5 },{ .name="PeiDefaultIoWrite", .address=0x7c15 },{ .name="PeiFfsFvPpiProcessVolume", .address=0x851d },{ .name="PeiCore", .address=0x240 },{ .name="PeiFreePages", .address=0x6dd5 },{ .name="AllocateCopyPool.constprop.27", .address=0x4dff },{ .name="PeiImageRead", .address=0x678f },{ .name="PeiReportStatusCode", .address=0x9100 },{ .name="DebugPrint", .address=0x2684 },{ .name="PeiDefaultIoRead16", .address=0x7bfe },{ .name="ThirdPartyFvPpiNotifyCallback", .address=0x856a },{ .name="CpuDeadLoop", .address=0x25a5 },{ .name="PeiDefaultMemRead8", .address=0x7c07 },{ .name="PeiFfsFvPpiFindFileByName", .address=0x8cb6 },{ .name="ProcessNotifyList", .address=0x95a2 },{ .name="PeiRegisterForShadow", .address=0x7ce7 },{ .name="CompareGuid", .address=0x29ee },{ .name="PeiServicesInstallPpi", .address=0x2ceb },{ .name="PeiDefaultPciCfg2Write", .address=0x7bdf },{ .name="PeCoffLoaderGetPeHeaderMagicValue", .address=0x1c1e },{ .name="PeiServicesNotifyPpi", .address=0x2c59 },{ .name="PeiNotifyPpi", .address=0x9405 },{ .name="InternalPeiNotifyPpi.part.3", .address=0x923f },{ .name="InternalPeiInstallPpi.part.1", .address=0x942a },{ .name="PeCoffLoaderGetImageInfo.part.0", .address=0x1c37 },{ .name="CopyGuid", .address=0x2a3b },{ .name="_ModuleEntryPoint", .address=0x2619 },{ .name="ReportErrorCodeEnabled", .address=0x24ee },{ .name="PeiDefaultIoRead", .address=0x7c20 },{ .name="PeiFfsGetFileInfo", .address=0x5540 },{ .name="PeiDefaultIoWrite32", .address=0x7bec },{ .name="SetMem", .address=0x2820 },{ .name="PeiAllocatePages", .address=0x6f72 },{ .name="SwitchStack.constprop.26", .address=0x4e7e },{ .name="CopyMem.part.0", .address=0x2787 },{ .name="VerifyPeim", .address=0x96b3 },{ .name="FindFileEx.constprop.0", .address=0x7d70 },{ .name="GetPeiServicesTablePointer", .address=0x2bdd },{ .name="PeiServicesAllocatePages", .address=0x2c24 },{ .name="PeiDefaultPciCfg2Read", .address=0x7bd4 },{ .name="CalculateSum8", .address=0x2b29 },{ .name="PeiReInstallPpi", .address=0x8fff },{ .name="IsPpiInstalled.constprop.11", .address=0x9718 },{ .name="DispatchNotify.constprop.13", .address=0x50bd },{ .name="PeiDefaultIoRead64", .address=0x7bf2 },{ .name="GetFirstHob", .address=0x2dfa },{ .name="DebugAssertEnabled", .address=0x254e },{ .name="PeiDefaultIoWrite64", .address=0x7bea },{ .name="PeiCreateHob", .address=0x65a8 },{ .name="PeiDefaultMemRead", .address=0x7c0a },{ .name="ProcessFvFile", .address=0x574f },{ .name="PeiLoadImageLoadImage.constprop.1", .address=0x30af },{ .name="GetHobList", .address=0x2d75 },{ .name="PeiDefaultPciCfg2Modify", .address=0x7bc9 },{ .name="ProcessSection", .address=0x5fd0 },{ .name="PeiFfsFindNextVolume", .address=0x567e },{ .name="PeiDefaultIoWrite16", .address=0x7bee },{ .name="FvHandleToCoreHandle", .address=0x8e3d },{ .name="AllocateZeroPool", .address=0x2e51 },{ .name="PeiCoreEntry", .address=0x7446 },{ .name="PeiFfsFindSectionData3", .address=0x55a1 },{ .name="PeiAllocatePool", .address=0x6bb9 },{ .name="CopyMem", .address=0x2812 },{ .name="PeiDefaultIoWrite8", .address=0x7bf0 },{ .name="InternalPeiServicesInstallFvInfoPpi", .address=0x2e7b },{ .name="SetPeiServicesTablePointer", .address=0x2b96 },{ .name="AllocatePool", .address=0x2e16 },{ .name="PeiInstallPpi", .address=0x957d },{ .name="PeiFfsFindFileByName", .address=0x544f },{ .name="PeiSetBootMode", .address=0x7c36 },{ .name="PeiDefaultIoRead32", .address=0x7bf8 },{ .name="InternalCheckFvAlignment", .address=0x271f },{ .name="PeiFfsFvPpiFindSectionByType2", .address=0x8a80 },{ .name="PeiLoadImageLoadImageWrapper", .address=0x6c55 },{ .name="AsmReadIdtr", .address=0x2941 }
-        }
-    },
-    { .name = "PlatformPei", .BaseAddress=0x00008352c0, .EntryPoint=0x0000835500, .textbaseaddress=0x0000835500, .databaseaddress=0x000083d300, .fcount = 74, .functions =
-        {
-            { .name="PlatformDebugLibIoPortFound", .address=0x31a7 },{ .name="SwapBytes32", .address=0x31cd },{ .name="WriteUnaligned64", .address=0x3668 },{ .name="AsciiStrLen", .address=0x3715 },{ .name="InternalQemuFwCfgReadBytes", .address=0x3899 },{ .name="WriteFeatureControl", .address=0x40bf },{ .name="InternalPeiCreateHob", .address=0x3a74 },{ .name="BasePrintLibSPrintMarker.constprop.30", .address=0x4eac },{ .name="GetVariableMtrrCountWorker", .address=0x60cc },{ .name="LShiftU64", .address=0x3813 },{ .name="MtrrLibGetNumberOfTypes", .address=0x5cca },{ .name="LibPcdSetBoolS", .address=0x3b96 },{ .name="QemuFwCfgSelectItem", .address=0x33e5 },{ .name="AsciiStrnLenS", .address=0x329a },{ .name="GetNamedFwCfgBoolean", .address=0x4185 },{ .name="AsciiStrCmp", .address=0x3796 },{ .name="LibPcdSet32S", .address=0x3bed },{ .name="MtrrGetVariableMtrrWorker.constprop.6", .address=0x6148 },{ .name="MtrrLibCalculateSubtractivePath", .address=0x4a01 },{ .name="RShiftU64", .address=0x3856 },{ .name="OnMpServicesAvailable.lto_priv.34", .address=0x40d5 },{ .name="AddMemoryBaseSizeHob", .address=0x4262 },{ .name="DebugPrintEnabled", .address=0x3266 },{ .name="DebugAssert", .address=0x32f2 },{ .name="ReadUnaligned64", .address=0x36a7 },{ .name="MtrrLibGetRawVariableRanges", .address=0x5ffb },{ .name="PciCf8Read16", .address=0x352b },{ .name="AddIoMemoryBaseSizeHob", .address=0x427d },{ .name="MtrrLibAppendVariableMtrr", .address=0x5abc },{ .name="GetPcdPpiPointer", .address=0x3afe },{ .name="BasePrintLibFillBuffer", .address=0x326c },{ .name="MtrrLibLowestType", .address=0x5a6c },{ .name="BuildMemoryAllocationHob", .address=0x3f88 },{ .name="BasePrintLibSPrint.constprop.31", .address=0x61d1 },{ .name="ZeroMem", .address=0x3e10 },{ .name="GetSystemMemorySizeAbove4gb.lto_priv.36", .address=0x429b },{ .name="ReadUnaligned16", .address=0x36de },{ .name="ScanOrAdd64BitE820Ram.lto_priv.37", .address=0x430b },{ .name="QemuFwCfgRead32", .address=0x3e9b },{ .name="MtrrGetAllMtrrs", .address=0x4509 },{ .name="MtrrLibSetMemoryType", .address=0x5d34 },{ .name="DebugPrint", .address=0x334a },{ .name="GetPowerOfTwo64", .address=0x3a10 },{ .name="GetSystemMemorySizeBelow4gb", .address=0x42dc },{ .name="MtrrSetMemoryAttributeInMtrrSettings.constprop.1", .address=0x1ab7 },{ .name="CpuDeadLoop", .address=0x32d6 },{ .name="MemEncryptSevIsEnabled", .address=0x31e1 },{ .name="QemuInitializeRam.lto_priv.35", .address=0x457c },{ .name="MtrrLibInitializeMtrrMask", .address=0x5f74 },{ .name="QemuFwCfgFindFile", .address=0x3eb7 },{ .name="PeiServicesInstallPpi", .address=0x3adc },{ .name="SaveAndDisableInterrupts", .address=0x32cb },{ .name="IoRead32", .address=0x3456 },{ .name="CopyGuid", .address=0x3c19 },{ .name="_ModuleEntryPoint", .address=0x240 },{ .name="BuildGuidDataHob", .address=0x3ce2 },{ .name="HighBitSet64", .address=0x39bc },{ .name="SetMem", .address=0x3db1 },{ .name="MtrrLibCalculateLeastMtrrs", .address=0x5af1 },{ .name="CopyMem.part.0", .address=0x3c57 },{ .name="GetPeiServicesTablePointer", .address=0x3a32 },{ .name="IoWrite32", .address=0x3419 },{ .name="MtrrLibPreMtrrChange", .address=0x607e },{ .name="PciCf8Or8", .address=0x35c7 },{ .name="DebugAssertEnabled", .address=0x3269 },{ .name="MtrrLibApplyVariableMtrrs", .address=0x48ca },{ .name="SetInterruptState", .address=0x32c0 },{ .name="AllocateZeroPool", .address=0x4074 },{ .name="IsMtrrSupported", .address=0x44bf },{ .name="AsciiSPrint.constprop.28", .address=0x6118 },{ .name="PciCf8Write32", .address=0x348d },{ .name="QemuFwCfgReadBytes", .address=0x3e7f },{ .name="BuildResourceDescriptorHob", .address=0x4019 },{ .name="LibPcdSet64S", .address=0x3bc1 }
-        }
-    }
 };
 
 #endif
